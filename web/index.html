@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Control Room</title>
+    <style>
+      :root { color-scheme: light; font-family: system-ui, sans-serif; }
+      body { margin: 2rem auto; max-width: 64rem; padding: 0 1rem; background: #f5f7fa; color: #172033; }
+      header, section { background: white; border: 1px solid #dce2ea; border-radius: .7rem; padding: 1rem 1.25rem; }
+      header { margin-bottom: 1rem; }
+      .safe { color: #086b3a; font-weight: 700; }
+      .controls { display: flex; gap: .6rem; }
+      input, button { font: inherit; padding: .55rem .7rem; }
+      input { flex: 1; }
+      button { background: #173b72; color: white; border: 0; border-radius: .35rem; cursor: pointer; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin-top: 1rem; }
+      .value { font-size: 1.35rem; font-weight: 700; }
+      #evidence { margin: .5rem 0 0; padding-left: 1.25rem; }
+      .wide { grid-column: 1 / -1; }
+    </style>
+  </head>
+  <body>
+    <header>
+    <h1>Control Room</h1>
+    <p class="safe">Local synthetic Phase 0</p>
+    <p>Inspect bounded task state and metadata-only evidence.</p>
+    </header>
+    <section aria-label="Task lookup">
+      <label for="task-id">Task ID</label>
+      <div class="controls">
+        <input id="task-id" placeholder="syn_…" autocomplete="off">
+        <button id="load-task" type="button">Load task</button>
+      </div>
+      <p id="dashboard-error" role="alert"></p>
+    </section>
+    <main class="grid" aria-live="polite">
+      <section><h2>Task state</h2><p class="value" id="task-state">Not loaded</p></section>
+      <section><h2>Tool budget</h2><p class="value" id="tool-budget">— / 3</p></section>
+      <section><h2>Failure budget</h2><p class="value" id="failure-budget">— / 1</p></section>
+      <section><h2>Breaker availability</h2><p class="value" id="breaker-status">Checking…</p></section>
+      <section class="wide"><h2>Evidence</h2><ul id="evidence"><li>Not loaded</li></ul></section>
+    </main>
+    <script>
+      const text = (id, value) => { document.getElementById(id).textContent = value; };
+      async function loadTask() {
+        const taskId = document.getElementById("task-id").value.trim();
+        if (!taskId) { text("dashboard-error", "Enter a task ID."); return; }
+        text("dashboard-error", "");
+        const taskResponse = await fetch(`/tasks/${taskId}`);
+        const evidenceResponse = await fetch(`/tasks/${taskId}/evidence`);
+        if (!taskResponse.ok || !evidenceResponse.ok) {
+          text("dashboard-error", "Task could not be loaded.");
+          return;
+        }
+        const { task } = await taskResponse.json();
+        const records = await evidenceResponse.json();
+        text("task-state", task.state);
+        text("tool-budget", `${task.tool_actions} / 3`);
+        text("failure-budget", `${task.failed_actions} / 1`);
+        const list = document.getElementById("evidence");
+        list.replaceChildren();
+        for (const record of records) {
+          const item = document.createElement("li");
+          item.textContent = `${record.check_id}: ${record.kind} (${record.actor_id})`;
+          list.appendChild(item);
+        }
+        if (!records.length) {
+          const item = document.createElement("li");
+          item.textContent = "No evidence recorded";
+          list.appendChild(item);
+        }
+      }
+      document.getElementById("load-task").addEventListener("click", () => void loadTask());
+      fetch("/health").then(response => response.json()).then(health => {
+        text("breaker-status", health.demo_mode ? "DEMO ENABLED" : "DEMO DISABLED");
+      });
+    </script>
+  </body>
+</html>
